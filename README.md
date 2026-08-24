@@ -33,7 +33,17 @@ npm run dist
 
 Builds installers into `dist/` for the current platform: dmg and zip on mac (arm64 and x64), an nsis setup exe on Windows, AppImage and deb on Linux. `npm run icon` regenerates the icon set from `build/make-icon.py`. On a tag push the release workflow builds all three platforms and publishes them with a SHA256SUMS.txt.
 
-The installers are unsigned. macOS Gatekeeper will need a right click then Open the first time, and Windows SmartScreen will warn on the setup exe (More info, then Run anyway). Same story as the miners, signing certificates come later. The published checksums are the way to verify a download in the meantime.
+The installers are unsigned for now, so the operating system will complain the first time. The download is fine, verify it against SHA256SUMS.txt if you want to be sure. Signing certificates come later.
+
+**macOS.** Because the app is not notarized, a downloaded copy is quarantined and Gatekeeper shows "Veil Quick Miner is damaged and can't be opened". It is not damaged, that is just the message macOS gives an un-notarized app on Apple Silicon. Drag it to Applications, then clear the quarantine flag once:
+
+```
+xattr -dr com.apple.quarantine "/Applications/Veil Quick Miner.app"
+```
+
+Then open it normally. (Right click then Open, and Open Anyway in Settings, usually do not clear the "damaged" case, the xattr command does.)
+
+**Windows.** SmartScreen warns on the setup exe: click More info, then Run anyway.
 
 The installer stays small (the miners and the proxy are not bundled). The app downloads the right release the first time you mine and verifies it against its checksums, so nothing binary ships inside the installer.
 
