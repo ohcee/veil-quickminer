@@ -14,7 +14,7 @@ Status: milestone 3, pool and solo both work end to end. The app downloads the p
 
 Pool presets come from `src/pools.json`, verified against the endpoints on mining.veil-info.org: yadaminers for all three algos, FastPool for RandomX. SHA256d is linux only until Veil-Miner-SHA gets windows builds.
 
-Solo prerequisites: your veild needs `miningaddress=<your address>` in veil.conf (rewards go there), and for SHA256d a veild built from current master. RandomX solo needs the next veilproxy release; v3.0.1 has a login bug that silently drops xmrig's shares (fix is written, pending release).
+Solo prerequisites: your veild needs `miningaddress=<your address>` in veil.conf (rewards go there), and for SHA256d a veild built from current master. RandomX solo uses veilproxy v3.0.2 or later (v3.0.1 had a login bug that silently dropped xmrig's shares).
 
 ## Run it
 
@@ -31,5 +31,4 @@ npm start
 - [x] miner manager: fetch releases, verify checksums, launch, live hashrate
 - [x] pool presets with verified stratum urls
 - [x] solo mode: local veilproxy against your own veild, all three algos
-- [ ] bump the veilproxy pin once the randomx login fix ships
 - [ ] installers for windows, linux, mac

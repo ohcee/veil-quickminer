@@ -3,7 +3,7 @@
   "proxy": {
     "name": "veilproxy",
     "repo": "ohcee/veil-node-stratum-proxy",
-    "tag": "v3.0.1",
+    "tag": "v3.0.2",
     "sums": "SHA256SUMS.txt",
     "assets": {
       "win32-x64": "veilproxy-windows.zip",
