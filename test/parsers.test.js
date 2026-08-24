@@ -1,7 +1,7 @@
 // Miner output parsing and command line building. Run with: node test/parsers.test.js
 
 const assert = require('assert');
-const { parsers, buildArgs } = require('../src/minerman');
+const { parsers, shareParsers, buildArgs } = require('../src/minerman');
 
 let passed = 0;
 function ok(name, fn) {
@@ -60,6 +60,24 @@ ok('sha256d args differ per vendor build', () => {
   const amd = buildArgs('sha256d', { ...cfg, port: 3333, vendor: 'amd' });
   assert(!amd.includes('-a'));
   assert(amd.includes('stratum+tcp://veil.yadaminers.pl:3333'));
+});
+
+ok('xmrig accepted share line', () => {
+  assert.deepStrictEqual(
+    parsers.randomx && shareParsers.randomx('[2026-08-24 06:00:00]  cpu      accepted (12/1) diff 65537 (2 ms)'),
+    { accepted: 12, rejected: 1 }
+  );
+  assert.strictEqual(shareParsers.randomx('[2026-08-24 06:00:00]  net      new job from pool'), null);
+});
+
+ok('veilminer accepted count from A/R', () => {
+  assert.deepStrictEqual(shareParsers.progpow(' m 21:33:12 veilminer 0:31 A7 R1 24.32 Mh - cu0 24.32'), { accepted: 7, rejected: 1 });
+  assert.deepStrictEqual(shareParsers.progpow(' m 21:33:12 veilminer 0:01 A3 24.32 Mh'), { accepted: 3, rejected: 0 });
+});
+
+ok('ccminer accepted out of total', () => {
+  assert.deepStrictEqual(shareParsers.sha256d('[2026-08-24 06:00:00] accepted: 12/13 (diff 512.00), 3.33 GH/s yes!'), { accepted: 12, rejected: 1 });
+  assert.strictEqual(shareParsers.sha256d('[2026-08-24 06:00:00] GPU #0: NVIDIA, 3331.21 MH/s'), null);
 });
 
 console.log(passed + ' checks passed');

@@ -42,7 +42,8 @@ function encode(hrp, data) {
 }
 
 function decode(addr) {
-  if (typeof addr !== 'string' || addr.length < 8 || addr.length > 90) return null;
+  // Veil caps bech32 at 122 chars, not BIP173's 90: stealth addresses are ~121
+  if (typeof addr !== 'string' || addr.length < 8 || addr.length > 122) return null;
   const lower = addr.toLowerCase();
   if (addr !== lower && addr !== addr.toUpperCase()) return null;
   const pos = lower.lastIndexOf('1');
@@ -96,30 +97,46 @@ function fromWords(words) {
   return out;
 }
 
-const NETWORKS = { bv: 'mainnet', tv: 'testnet' };
+// hrp -> { network, type }. Veil: bv/tv basecoin, sv/tps stealth.
+const HRP = {
+  bv: { network: 'mainnet', type: 'basecoin' },
+  tv: { network: 'testnet', type: 'basecoin' },
+  sv: { network: 'mainnet', type: 'stealth' },
+  tps: { network: 'testnet', type: 'stealth' },
+};
 
+// Validates any Veil address and reports its type. Whether a given type is
+// acceptable for a pool or for solo is decided by the caller, not here:
+// yadaminers takes basecoin or stealth, FastPool and solo need basecoin.
 function validateVeilAddress(input) {
   const addr = String(input || '').trim();
   if (!addr) return { valid: false, reason: '' };
-  if (/^sv1/i.test(addr)) {
-    return { valid: false, reason: 'that is a stealth address, mining payouts need a basecoin address starting with bv1' };
-  }
   const dec = decode(addr);
   if (!dec) {
     return { valid: false, reason: 'not a valid address, check for typos' };
   }
-  const network = NETWORKS[dec.hrp];
-  if (!network) {
-    return { valid: false, reason: 'unknown prefix "' + dec.hrp + '", expected an address starting with bv1' };
+  const info = HRP[dec.hrp];
+  if (!info) {
+    return { valid: false, reason: 'unknown prefix "' + dec.hrp + '", expected bv1 or sv1' };
   }
   if (dec.data.length < 1) return { valid: false, reason: 'empty payload' };
-  const version = dec.data[0];
-  if (version !== 0) return { valid: false, reason: 'unsupported address version' };
-  const program = fromWords(dec.data.slice(1));
-  if (!program || (program.length !== 20 && program.length !== 32)) {
-    return { valid: false, reason: 'bad payload length' };
+
+  if (info.type === 'basecoin') {
+    const version = dec.data[0];
+    if (version !== 0) return { valid: false, reason: 'unsupported address version' };
+    const program = fromWords(dec.data.slice(1));
+    if (!program || (program.length !== 20 && program.length !== 32)) {
+      return { valid: false, reason: 'bad payload length' };
+    }
+  } else {
+    // stealth: whole payload is a CStealthAddress blob (~70 bytes). The
+    // bech32 checksum already caught any typo; just sanity check the size.
+    const blob = fromWords(dec.data);
+    if (!blob || blob.length < 66) {
+      return { valid: false, reason: 'bad stealth payload' };
+    }
   }
-  return { valid: true, network };
+  return { valid: true, network: info.network, type: info.type };
 }
 
 module.exports = { encode, decode, toWords, fromWords, validateVeilAddress };

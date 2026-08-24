@@ -9,6 +9,7 @@ const ALGOS = [
 const state = {
   addressValid: false,
   network: null,
+  addressType: null,
   mode: 'pool',
   algo: null,
   hw: null,
@@ -63,6 +64,7 @@ function renderAlgos() {
       state.algo = algo.id;
       renderAlgos();
       renderPools();
+      refreshAddressFeedback();
       updateStart();
     });
     wrap.appendChild(el);
@@ -71,6 +73,47 @@ function renderAlgos() {
 
 function matchingPools() {
   return state.pools.filter((p) => !state.algo || p.algo === state.algo);
+}
+
+function selectedPool() {
+  const matching = matchingPools();
+  if (!matching.length) return null;
+  const idx = parseInt($('pool-select').value, 10);
+  return matching[Number.isFinite(idx) ? idx : 0] || matching[0];
+}
+
+// Whether the (already structurally valid) address suits the chosen mode and
+// pool. yadaminers takes basecoin or stealth; FastPool and solo need basecoin.
+function addressContext() {
+  if (!state.addressValid) return { ok: false, msg: '', cls: '' };
+  const typeLabel = state.addressType === 'stealth' ? 'stealth' : 'basecoin';
+  if (state.mode === 'solo') {
+    if (state.addressType !== 'basecoin') {
+      return { ok: false, msg: 'solo mining needs a basecoin (bv1) address', cls: 'warn' };
+    }
+    return { ok: true, msg: 'valid ' + state.network + ' basecoin address', cls: 'ok' };
+  }
+  if (state.network !== 'mainnet') {
+    return { ok: false, msg: 'pools pay out on mainnet, use a mainnet address', cls: 'warn' };
+  }
+  const pool = selectedPool();
+  if (pool && pool.addressTypes && !pool.addressTypes.includes(state.addressType)) {
+    return { ok: false, msg: pool.name.split(',')[0] + ' needs a basecoin (bv1) address', cls: 'warn' };
+  }
+  return { ok: true, msg: 'valid ' + state.network + ' ' + typeLabel + ' address', cls: 'ok' };
+}
+
+// Repaint the address line for the current mode/pool. Called whenever the
+// address, mode, algo or pool changes.
+function refreshAddressFeedback() {
+  const input = $('address');
+  const msg = $('addr-msg');
+  if (!input.value.trim() || !state.addressValid) return;
+  const ctx = addressContext();
+  input.className = ctx.ok ? 'ok' : 'err';
+  msg.className = 'msg ' + ctx.cls;
+  msg.textContent = ctx.msg;
+  updateStart();
 }
 
 function renderPools() {
@@ -92,7 +135,19 @@ function renderPools() {
     opt.textContent = p.name + ' · ' + p.host + ':' + p.port;
     select.appendChild(opt);
   });
-  hint.textContent = 'pools pay out on mainnet, so use a bv1 address';
+  updatePoolHint();
+}
+
+function updatePoolHint() {
+  const hint = $('pool-hint');
+  const pool = selectedPool();
+  if (!pool) {
+    hint.textContent = '';
+  } else if (pool.addressTypes && pool.addressTypes.includes('stealth')) {
+    hint.textContent = pool.name.split(',')[0] + ' takes a bv1 or sv1 mainnet address';
+  } else {
+    hint.textContent = pool.name.split(',')[0] + ' pays out on mainnet, needs a bv1 basecoin address';
+  }
 }
 
 function setMode(mode) {
@@ -102,6 +157,7 @@ function setMode(mode) {
   $('mode-solo').classList.toggle('active', mode === 'solo');
   $('pool-panel').classList.toggle('hidden', mode !== 'pool');
   $('solo-panel').classList.toggle('hidden', mode !== 'solo');
+  refreshAddressFeedback();
   updateStart();
 }
 
@@ -110,7 +166,7 @@ function updateStart() {
     $('start').disabled = state.busy && !state.mining;
     return;
   }
-  $('start').disabled = !(state.addressValid && state.algo);
+  $('start').disabled = !(state.addressValid && state.algo && addressContext().ok);
 }
 
 function formatRate(hs) {
@@ -124,6 +180,14 @@ function setStatus(text, cls) {
   const status = $('status');
   status.className = 'msg' + (cls ? ' ' + cls : '');
   status.textContent = text;
+}
+
+function resetCounters() {
+  $('shares').textContent = '0';
+  $('rejects').textContent = '0';
+  $('blocks').textContent = '0';
+  $('rejects-stat').hidden = true;
+  $('blocks-stat').hidden = true;
 }
 
 function setMiningUi(mining) {
@@ -155,10 +219,15 @@ function onAddressInput() {
     const res = await window.qm.validateAddress(value);
     state.addressValid = res.valid;
     state.network = res.network || null;
-    input.className = res.valid ? 'ok' : 'err';
-    msg.className = 'msg ' + (res.valid ? 'ok' : 'err');
-    msg.textContent = res.valid ? 'valid ' + res.network + ' address' : res.reason;
-    updateStart();
+    state.addressType = res.type || null;
+    if (!res.valid) {
+      input.className = 'err';
+      msg.className = 'msg err';
+      msg.textContent = res.reason;
+      updateStart();
+      return;
+    }
+    refreshAddressFeedback();
   }, 200);
 }
 
@@ -200,15 +269,15 @@ async function onStart() {
     address: $('address').value.trim(),
     vendor: primaryVendor(),
   };
+  const ctx = addressContext();
+  if (!ctx.ok) {
+    setStatus(ctx.msg, 'warn');
+    return;
+  }
   if (state.mode === 'pool') {
-    const matching = matchingPools();
-    const pool = matching[parseInt($('pool-select').value, 10)] || matching[0];
+    const pool = selectedPool();
     if (!pool) {
       setStatus('no pool available for this algo yet', 'warn');
-      return;
-    }
-    if (state.network !== 'mainnet') {
-      setStatus('pools pay out on mainnet, use a bv1 address', 'warn');
       return;
     }
     cfg.host = pool.host;
@@ -226,6 +295,7 @@ async function onStart() {
   state.busy = true;
   updateStart();
   setStatus('getting ready...');
+  resetCounters();
   const res = await window.qm.startMining(cfg);
   state.busy = false;
   if (res.ok) {
@@ -239,7 +309,15 @@ async function onStart() {
 function onMiningEvent(ev) {
   if (ev.type === 'status') {
     setStatus(ev.text, /^mining/.test(ev.text) ? 'ok' : '');
+  } else if (ev.type === 'share') {
+    $('shares').textContent = String(ev.accepted);
+    if (ev.rejected > 0) {
+      $('rejects-stat').hidden = false;
+      $('rejects').textContent = String(ev.rejected);
+    }
   } else if (ev.type === 'block') {
+    $('blocks-stat').hidden = false;
+    $('blocks').textContent = String(ev.count);
     setStatus('block found! ' + ev.count + ' this session 🎉', 'ok');
   } else if (ev.type === 'hashrate') {
     const r = formatRate(ev.hs);
@@ -262,6 +340,10 @@ async function init() {
   });
   $('mode-pool').addEventListener('click', () => setMode('pool'));
   $('mode-solo').addEventListener('click', () => setMode('solo'));
+  $('pool-select').addEventListener('change', () => {
+    updatePoolHint();
+    refreshAddressFeedback();
+  });
   $('find-node').addEventListener('click', findNode);
   $('start').addEventListener('click', onStart);
   window.qm.onMiningEvent(onMiningEvent);

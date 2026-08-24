@@ -49,6 +49,34 @@ function parseCcminer(line) {
 
 const PARSERS = { randomx: parseXmrig, progpow: parseVeilminer, sha256d: parseCcminer };
 
+// ---- share recognizers: cumulative {accepted, rejected} off a log line ----
+
+// xmrig: "cpu   accepted (12/1) diff 65537 (2 ms)"
+function sharesXmrig(line) {
+  const m = line.match(/\baccepted\s+\((\d+)\/(\d+)\)/);
+  if (!m) return null;
+  return { accepted: parseInt(m[1], 10), rejected: parseInt(m[2], 10) };
+}
+
+// veilminer periodic line carries cumulative accepted as A<n> and rejected R<n>
+function sharesVeilminer(line) {
+  const a = line.match(/\bA(\d+)\b/);
+  if (!a) return null;
+  const r = line.match(/\bR(\d+)\b/);
+  return { accepted: parseInt(a[1], 10), rejected: r ? parseInt(r[1], 10) : 0 };
+}
+
+// ccminer: "accepted: 12/13 (diff 512.00), 3.33 GH/s yes!"  (a/total)
+function sharesCcminer(line) {
+  const m = line.match(/\baccepted:\s*(\d+)\/(\d+)\b/);
+  if (!m) return null;
+  const accepted = parseInt(m[1], 10);
+  const total = parseInt(m[2], 10);
+  return { accepted, rejected: Math.max(0, total - accepted) };
+}
+
+const SHARE_PARSERS = { randomx: sharesXmrig, progpow: sharesVeilminer, sha256d: sharesCcminer };
+
 // ---- command lines, straight from the field tested hub recipes ------------
 
 function buildArgs(algo, cfg) {
@@ -359,6 +387,7 @@ function spawnMiner(cfg, bin) {
   state.miner = child;
 
   const parse = PARSERS[cfg.algo];
+  const parseShares = SHARE_PARSERS[cfg.algo];
   let sawRate = false;
   const onData = lineReader((line) => {
     pushLog(line);
@@ -371,6 +400,8 @@ function spawnMiner(cfg, bin) {
       }
       emit({ type: 'hashrate', hs: rate });
     }
+    const sh = parseShares(line);
+    if (sh) emit({ type: 'share', accepted: sh.accepted, rejected: sh.rejected });
   });
   child.stdout.on('data', onData);
   child.stderr.on('data', onData);
@@ -511,5 +542,6 @@ module.exports = {
   buildProxyArgs,
   pickShareDiff,
   parsers: PARSERS,
+  shareParsers: SHARE_PARSERS,
   manifest,
 };

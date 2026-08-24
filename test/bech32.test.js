@@ -55,10 +55,25 @@ ok('foreign prefix rejected', () => {
   assert(res.reason.includes('bv1'));
 });
 
-ok('stealth address gets a plain explanation', () => {
-  const res = validateVeilAddress('sv1qqpabc');
-  assert.strictEqual(res.valid, false);
-  assert(res.reason.includes('stealth'));
+ok('real basecoin address reports type basecoin', () => {
+  const res = validateVeilAddress('bv1qre9xsa7kj8vh6dg963w24vyx4g35gv8pa9vrsy');
+  assert.strictEqual(res.valid, true);
+  assert.strictEqual(res.network, 'mainnet');
+  assert.strictEqual(res.type, 'basecoin');
+});
+
+ok('real stealth address is valid and reports type stealth', () => {
+  const sv = 'sv1qqpjsrc60t60jhaywj5krmwla52ska70twc7wun6qnee65guxhvtxegpqwhuxypra4jn3pq86s24ryltcw6g2ss4573hyqac9u4g23m9mvxpyqqqwny49k';
+  const res = validateVeilAddress(sv);
+  assert.strictEqual(res.valid, true);
+  assert.strictEqual(res.network, 'mainnet');
+  assert.strictEqual(res.type, 'stealth');
+});
+
+ok('a damaged stealth address is caught by the checksum', () => {
+  const sv = 'sv1qqpjsrc60t60jhaywj5krmwla52ska70twc7wun6qnee65guxhvtxegpqwhuxypra4jn3pq86s24ryltcw6g2ss4573hyqac9u4g23m9mvxpyqqqwny49k';
+  const bad = sv.slice(0, 20) + (sv[20] === 'q' ? 'p' : 'q') + sv.slice(21);
+  assert.strictEqual(validateVeilAddress(bad).valid, false);
 });
 
 ok('wrong witness version rejected', () => {

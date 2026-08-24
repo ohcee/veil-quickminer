@@ -114,19 +114,63 @@ async function smokeRun() {
       const last = goodAddr[goodAddr.length - 1];
       const badAddr = goodAddr.slice(0, -1) + (last === 'q' ? 'p' : 'q');
 
+      // a real mainnet stealth address, valid for yadaminers
+      const stealthAddr = 'sv1qqpjsrc60t60jhaywj5krmwla52ska70twc7wun6qnee65guxhvtxegpqwhuxypra4jn3pq86s24ryltcw6g2ss4573hyqac9u4g23m9mvxpyqqqwny49k';
+
       const good = await win.webContents.executeJavaScript(
         'window.qm.validateAddress(' + JSON.stringify(goodAddr) + ')'
       );
       const bad = await win.webContents.executeJavaScript(
         'window.qm.validateAddress(' + JSON.stringify(badAddr) + ')'
       );
-      checksOk = good && good.valid === true && good.network === 'mainnet' && bad && bad.valid === false;
-      detail = JSON.stringify({ good, bad });
+      const stealth = await win.webContents.executeJavaScript(
+        'window.qm.validateAddress(' + JSON.stringify(stealthAddr) + ')'
+      );
+      checksOk =
+        good && good.valid === true && good.type === 'basecoin' &&
+        bad && bad.valid === false &&
+        stealth && stealth.valid === true && stealth.type === 'stealth';
+      detail = JSON.stringify({ good, bad, stealth });
 
-      // put the good address in the box so the screenshot shows live validation
+      // context gating: a stealth address suits yadaminers but not FastPool
+      // or solo. Drive the real DOM (randomx default pool is yadaminers).
+      const readCtx = () =>
+        win.webContents.executeJavaScript(
+          '({msg:document.getElementById("addr-msg").textContent, disabled:document.getElementById("start").disabled})'
+        );
+      const setPool = (v) =>
+        win.webContents.executeJavaScript(
+          '(()=>{const s=document.getElementById("pool-select");s.value="' + v +
+            '";s.dispatchEvent(new Event("change",{bubbles:true}));return true;})()'
+        );
+      await win.webContents.executeJavaScript(
+        '(()=>{const a=document.getElementById("address");a.value=' + JSON.stringify(stealthAddr) +
+          ';a.dispatchEvent(new Event("input",{bubbles:true}));return true;})()'
+      );
+      await new Promise((r) => setTimeout(r, 400));
+      const ctxYada = await readCtx();
+      // FastPool easy diff is index 1 among the randomx pools
+      await setPool('1');
+      await new Promise((r) => setTimeout(r, 200));
+      const ctxFast = await readCtx();
+      await win.webContents.executeJavaScript('document.getElementById("mode-solo").click();true');
+      await new Promise((r) => setTimeout(r, 200));
+      const ctxSolo = await readCtx();
+      // back to pool + yadaminers for the screenshot
+      await win.webContents.executeJavaScript('document.getElementById("mode-pool").click();true');
+      await setPool('0');
+      const ctxOk =
+        ctxYada.disabled === false && /stealth/.test(ctxYada.msg) &&
+        ctxFast.disabled === true && /basecoin/.test(ctxFast.msg) &&
+        ctxSolo.disabled === true && /basecoin/.test(ctxSolo.msg);
+      checksOk = checksOk && ctxOk;
+      detail = JSON.stringify({ good, bad, stealth, ctxYada, ctxFast, ctxSolo });
+
+      // show the stealth address accepted for the default yadaminers pool
+      const showAddr = process.env.QUICKMINER_SMOKE_LIVE ? goodAddr : stealthAddr;
       await win.webContents.executeJavaScript(
         'const el = document.getElementById("address");' +
-          'el.value = ' + JSON.stringify(goodAddr) + ';' +
+          'el.value = ' + JSON.stringify(showAddr) + ';' +
           'el.dispatchEvent(new Event("input", { bubbles: true })); true'
       );
       await new Promise((r) => setTimeout(r, 700));

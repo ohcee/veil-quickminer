@@ -1,6 +1,6 @@
 {
   "updated": "2026-08-24",
-  "note": "endpoints verified against mining.veil-info.org, the curated list the community already uses",
+  "note": "endpoints verified against mining.veil-info.org. addressTypes says which payout address kinds each pool accepts: yadaminers takes basecoin or stealth, FastPool basecoin only.",
   "pools": [
     {
       "name": "yadaminers",
@@ -8,6 +8,7 @@
       "host": "veil.yadaminers.pl",
       "port": 3333,
       "web": "https://veil.yadaminers.pl",
+      "addressTypes": ["basecoin", "stealth"],
       "verified": true
     },
     {
@@ -16,6 +17,7 @@
       "host": "veil.yadaminers.pl",
       "port": 3334,
       "web": "https://veil.yadaminers.pl",
+      "addressTypes": ["basecoin", "stealth"],
       "verified": true
     },
     {
@@ -24,6 +26,7 @@
       "host": "veil.yadaminers.pl",
       "port": 3335,
       "web": "https://veil.yadaminers.pl",
+      "addressTypes": ["basecoin", "stealth"],
       "verified": true
     },
     {
@@ -32,6 +35,7 @@
       "host": "fastpool.xyz",
       "port": 10281,
       "web": "https://fastpool.xyz/veil-rx/",
+      "addressTypes": ["basecoin"],
       "verified": true
     },
     {
@@ -40,6 +44,7 @@
       "host": "fastpool.xyz",
       "port": 10282,
       "web": "https://fastpool.xyz/veil-rx/",
+      "addressTypes": ["basecoin"],
       "verified": true
     }
   ]
