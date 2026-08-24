@@ -1,0 +1,15 @@
+{
+  "name": "veil-quickminer",
+  "version": "0.1.0",
+  "description": "One click mining for Veil. Paste an address, pick solo or pool, hit start.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/bech32.test.js",
+    "smoke": "QUICKMINER_SMOKE=1 electron ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^43.4.1"
+  }
+}

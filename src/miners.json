@@ -1,0 +1,27 @@
+{
+  "note": "release sources for the miner manager milestone, repos and asset patterns get pinned down before downloads are wired up",
+  "miners": {
+    "randomx": {
+      "name": "Veil-Miner-CPU",
+      "kind": "cpu",
+      "repo": null,
+      "release": null,
+      "checksums": "SHA256SUMS.txt"
+    },
+    "progpow": {
+      "name": "Veil-Miner",
+      "kind": "gpu",
+      "repo": "Veil-Project/Veil-Miner",
+      "release": "v1.1.3",
+      "checksums": "SHA256SUMS.txt"
+    },
+    "sha256d": {
+      "name": "Veil-Miner-SHA",
+      "kind": "gpu",
+      "repo": null,
+      "release": null,
+      "checksums": null,
+      "todo": "needs a public release with checksums first"
+    }
+  }
+}

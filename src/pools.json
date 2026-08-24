@@ -1,0 +1,20 @@
+{
+  "updated": "2026-08-23",
+  "note": "stratum urls are unverified placeholders until the miner manager milestone, the app blocks start on any entry without a verified stratum url",
+  "pools": [
+    {
+      "name": "Fastpool",
+      "algo": "randomx",
+      "stratum": null,
+      "web": "https://fastpool.xyz",
+      "verified": false
+    },
+    {
+      "name": "Yadaminers",
+      "algo": "progpow",
+      "stratum": null,
+      "web": null,
+      "verified": false
+    }
+  ]
+}

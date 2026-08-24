@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <title>Veil Quick Miner</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Veil Quick Miner</h1>
+    <p class="tag">paste an address, pick a lane, hit start</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <label for="address">Payout address</label>
+      <input id="address" placeholder="bv1..." spellcheck="false" autocomplete="off" autocapitalize="off">
+      <div id="addr-msg" class="msg"></div>
+    </section>
+
+    <section class="card">
+      <label>Mode</label>
+      <div class="seg">
+        <button id="mode-pool" class="segbtn active" type="button">Pool</button>
+        <button id="mode-solo" class="segbtn" type="button">Solo</button>
+      </div>
+
+      <div id="pool-panel">
+        <select id="pool-select"></select>
+        <div id="pool-hint" class="hint"></div>
+      </div>
+
+      <div id="solo-panel" class="hidden">
+        <button id="find-node" class="ghost" type="button">Find my node</button>
+        <div id="node-msg" class="hint"></div>
+        <div class="grid2">
+          <input id="rpc-host" placeholder="rpc host (127.0.0.1)" spellcheck="false">
+          <input id="rpc-port" placeholder="rpc port" spellcheck="false">
+          <input id="rpc-user" placeholder="rpc user" spellcheck="false">
+          <input id="rpc-pass" placeholder="rpc password" type="password">
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <label>Algorithm</label>
+      <div id="algo-cards"></div>
+      <div id="hw-line" class="hint">detecting hardware...</div>
+    </section>
+
+    <section class="card run">
+      <button id="start" type="button" disabled>Start mining</button>
+      <div class="rate">
+        <span id="hashrate">0</span>
+        <span id="rate-unit" class="unit">H/s</span>
+      </div>
+      <div id="status" class="msg"></div>
+    </section>
+  </main>
+
+  <footer>v0.1.0 · interface preview · miner manager and solo proxy land next</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
