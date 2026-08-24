@@ -3,3 +3,4 @@ dist/
 smoke.png
 *.log
 .DS_Store
+build/icon.iconset/

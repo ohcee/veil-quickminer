@@ -1,15 +1,67 @@
 {
   "name": "veil-quickminer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One click mining for Veil. Paste an address, pick solo or pool, hit start.",
   "main": "main.js",
+  "author": "ohcee",
+  "homepage": "https://mining.veil-info.org",
   "scripts": {
     "start": "electron .",
     "test": "node test/bech32.test.js && node test/parsers.test.js && node test/solo.test.js",
-    "smoke": "QUICKMINER_SMOKE=1 electron ."
+    "smoke": "QUICKMINER_SMOKE=1 electron .",
+    "icon": "python3 build/make-icon.py",
+    "dist": "electron-builder",
+    "dist:dir": "electron-builder --dir"
   },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^43.4.1"
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "org.veil.quickminer",
+    "productName": "Veil Quick Miner",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "ui/**/*"
+    ],
+    "extraMetadata": {
+      "main": "main.js"
+    },
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ]
+    }
   }
 }

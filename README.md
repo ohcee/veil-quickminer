@@ -25,10 +25,23 @@ npm start
 
 `npm test` checks address validation, miner output parsing and the solo building blocks. `npm run smoke` boots the app, exercises validation over IPC, saves a screenshot and exits; add `QUICKMINER_SMOKE_LIVE=1` to have it press start and mine for real until the first hashrate shows. `node test/live.js` runs the download, verify, launch, hashrate pipeline headless against a throwaway address. `node test/live-solo.js <rpcport> <address>` runs the whole solo stack against a local veild and waits for an accepted block.
 
+## Build installers
+
+```
+npm run dist
+```
+
+Builds installers into `dist/` for the current platform: dmg and zip on mac (arm64 and x64), an nsis setup exe on Windows, AppImage and deb on Linux. `npm run icon` regenerates the icon set from `build/make-icon.py`. On a tag push the release workflow builds all three platforms and publishes them with a SHA256SUMS.txt.
+
+The installers are unsigned. macOS Gatekeeper will need a right click then Open the first time, and Windows SmartScreen will warn on the setup exe (More info, then Run anyway). Same story as the miners, signing certificates come later. The published checksums are the way to verify a download in the meantime.
+
+The installer stays small (the miners and the proxy are not bundled). The app downloads the right release the first time you mine and verifies it against its checksums, so nothing binary ships inside the installer.
+
 ## Roadmap
 
 - [x] the window: address check, solo or pool, algo picker, hardware detect, veil.conf finder
 - [x] miner manager: fetch releases, verify checksums, launch, live hashrate
 - [x] pool presets with verified stratum urls
 - [x] solo mode: local veilproxy against your own veild, all three algos
-- [ ] installers for windows, linux, mac
+- [x] installers for windows, linux, mac (electron-builder + release CI)
+- [ ] code signing / notarization
