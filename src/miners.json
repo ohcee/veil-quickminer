@@ -42,13 +42,14 @@
     "sha256d": {
       "name": "Veil-Miner-SHA",
       "repo": "ohcee/Veil-Miner-SHA",
-      "tag": "v0.1.7",
+      "tag": "v0.1.8",
       "sums": "SHA256SUMS.txt",
       "assets": {
         "linux-x64-nvidia": "veil-miner-sha-nvidia-linux-x64.tar.gz",
-        "linux-x64-amd": "veil-miner-sha-amd-linux-x64.tar.gz"
+        "linux-x64-amd": "veil-miner-sha-amd-linux-x64.tar.gz",
+        "win32-x64-nvidia": "veil-miner-sha-nvidia-windows-x64.zip"
       },
-      "bin": { "nvidia": "ccminer", "amd": "veil-miner-sha-amd", "default": "ccminer" }
+      "bin": { "nvidia": "ccminer", "nvidia-win32": "ccminer.exe", "amd": "veil-miner-sha-amd", "default": "ccminer" }
     }
   }
 }

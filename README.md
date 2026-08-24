@@ -12,7 +12,7 @@ Covers all three algos:
 
 Status: milestone 3, pool and solo both work end to end. The app downloads the pinned miner release, verifies it against SHA256SUMS, refuses to run anything that fails the check, launches the miner and shows the live hashrate. Solo mode preflights your veild over rpc, downloads veilproxy the same verified way, runs it locally and points the miner at it, so the whole block reward lands on the node's mining address. Proven on regtest: the engine mined real RandomX blocks through the full stack.
 
-Pool presets come from `src/pools.json`, verified against the endpoints on mining.veil-info.org: yadaminers for all three algos, FastPool for RandomX. SHA256d is linux only until Veil-Miner-SHA gets windows builds.
+Pool presets come from `src/pools.json`, verified against the endpoints on mining.veil-info.org: yadaminers for all three algos, FastPool for RandomX. SHA256d runs on Linux (NVIDIA and AMD) and Windows (NVIDIA); macOS has no SHA256d build yet.
 
 Solo prerequisites: your veild needs `miningaddress=<your address>` in veil.conf (rewards go there), and for SHA256d a veild built from current master. RandomX solo uses veilproxy v3.0.2 or later (v3.0.1 had a login bug that silently dropped xmrig's shares).
 

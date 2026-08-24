@@ -89,8 +89,10 @@ function availability(algo) {
   const def = manifest.miners[algo];
   const plat = process.platform + '-' + os.arch();
   if (algo === 'sha256d') {
-    if (process.platform !== 'linux') return { ok: false, why: 'linux only for now' };
-    return { ok: true };
+    // linux ships nvidia + amd; windows ships nvidia only; no macOS build yet
+    if (process.platform === 'linux') return { ok: true };
+    if (process.platform === 'win32') return { ok: true };
+    return { ok: false, why: 'linux or windows only for now' };
   }
   if (def.assets[plat]) return { ok: true };
   return { ok: false, why: 'no build for this machine yet' };
@@ -231,7 +233,10 @@ function assetKey(algo, vendor) {
 
 function binNames(algo, vendor) {
   const bin = manifest.miners[algo].bin;
-  if (algo === 'sha256d') return [vendor === 'amd' ? bin.amd : bin.nvidia];
+  if (algo === 'sha256d') {
+    if (vendor === 'amd') return [bin.amd];
+    return [process.platform === 'win32' ? bin['nvidia-win32'] : bin.nvidia];
+  }
   return [bin[process.platform] || bin.default];
 }
 
