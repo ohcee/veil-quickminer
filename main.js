@@ -52,8 +52,22 @@ ipcMain.handle('get-miners', () => {
   }
   return out;
 });
+const DEFAULT_RPC_PORT = { mainnet: 58812, testnet: 58813 };
+
 ipcMain.handle('start-mining', async (e, cfg) => {
   try {
+    if (cfg.mode === 'solo') {
+      const conf = veilconf.readVeilConf();
+      const node = cfg.node || {};
+      cfg.node = {
+        host: node.host || conf.host || '127.0.0.1',
+        port: parseInt(node.port, 10) || conf.port || DEFAULT_RPC_PORT[cfg.network] || 58812,
+        user: node.user || conf.user || '',
+        // the password never travels through the window: the renderer only
+        // says whether to use the one found on disk
+        pass: node.passFromConf ? conf.pass || '' : node.pass || '',
+      };
+    }
     await minerman.start(cfg, {
       baseDir: app.getPath('userData'),
       onEvent: (ev) => {

@@ -1,15 +1,21 @@
-// The miner manager. Downloads the right miner release, verifies it against
-// the published SHA256SUMS, unpacks it, launches it and reads the hashrate
-// off its output. Plain Node, no Electron imports, so it tests standalone.
+// The miner manager. Downloads miner and proxy releases, verifies them
+// against the published SHA256SUMS, unpacks, launches and reads hashrate and
+// block events off the process output. Plain Node, no Electron imports, so it
+// tests standalone.
+//
+// Pool mode:  miner -> pool
+// Solo mode:  miner -> local veilproxy -> the user's own veild
 
 const { spawn, execFile } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const https = require('https');
+const net = require('net');
 const os = require('os');
 const path = require('path');
 
 const manifest = require('./miners.json');
+const noderpc = require('./noderpc');
 
 // ---- output parsing, one recognizer per miner family ----------------------
 
@@ -33,7 +39,7 @@ function parseVeilminer(line) {
   return Number.isFinite(v) ? v : null;
 }
 
-// ccminer: "GPU #0: NVIDIA RTX 3080 Ti, 3331.21 MH/s" / "accepted: 5/5 (diff 512), 3.33 GH/s yes!"
+// ccminer: "GPU #0: NVIDIA RTX 3080 Ti, 3331.21 MH/s" / "accepted: 5/5 (diff 512.00), 3.33 GH/s yes!"
 function parseCcminer(line) {
   const m = line.match(/([\d.]+)\s*([kKmMgG]?)H\/s/);
   if (!m) return null;
@@ -60,6 +66,22 @@ function buildArgs(algo, cfg) {
     return ['-a', 'sha256dv', '-o', url, '-u', cfg.address, '-p', 'x'];
   }
   throw new Error('unknown algo ' + algo);
+}
+
+function buildProxyArgs(algo, port, nodeUrl, shareDiff) {
+  const args = ['-a', '127.0.0.1', '-p', String(port), '-n', nodeUrl, '--algos', algo, '--share-diff', String(shareDiff)];
+  if (algo === 'sha256d') args.push('--subscribe-algo', 'sha256d', '--sha256d-wire', 'cpuminer');
+  else if (algo === 'progpow') args.push('--subscribe-algo', 'progpow');
+  return args;
+}
+
+// share diff sits well under the net diff so no block worthy hash is dropped;
+// ccminer mishandles sub 1 diffs so sha256d never goes below 1
+function pickShareDiff(algo, netDiff) {
+  let diff = netDiff / 4;
+  if (algo === 'sha256d') diff = Math.max(1, Math.floor(diff));
+  if (!(diff > 0)) diff = algo === 'sha256d' ? 1 : 0.0001;
+  return diff;
 }
 
 // which platforms can run each algo right now, from the published assets
@@ -157,32 +179,12 @@ function findFile(dir, names) {
   return null;
 }
 
-function assetKey(algo, vendor) {
-  const plat = process.platform + '-' + os.arch();
-  if (algo === 'sha256d') return plat + '-' + (vendor === 'amd' ? 'amd' : 'nvidia');
-  return plat;
-}
-
-function binNames(algo, vendor) {
-  const bin = manifest.miners[algo].bin;
-  if (algo === 'sha256d') return [vendor === 'amd' ? bin.amd : bin.nvidia];
-  return [bin[process.platform] || bin.default];
-}
-
-// Downloads, verifies and unpacks if needed. Returns the path to the binary.
-async function prepare(algo, vendor, baseDir, onStatus) {
-  const def = manifest.miners[algo];
-  const avail = availability(algo);
-  if (!avail.ok) throw new Error(def.name + ': ' + avail.why);
-
-  const asset = def.assets[assetKey(algo, vendor)];
+// shared download, verify, unpack pipeline for miners and the proxy
+async function prepareDef(def, asset, wanted, home, onStatus) {
   if (!asset) throw new Error(def.name + ' has no build for this machine yet');
-
-  const home = path.join(baseDir, 'miners', algo, def.tag);
   const marker = path.join(home, '.verified-' + asset);
   fs.mkdirSync(home, { recursive: true });
 
-  const wanted = binNames(algo, vendor);
   let bin = findFile(home, wanted);
   if (bin && fs.existsSync(marker)) return bin;
 
@@ -216,112 +218,281 @@ async function prepare(algo, vendor, baseDir, onStatus) {
   await extract(archive, home);
   bin = findFile(home, wanted);
   if (!bin) throw new Error('could not find ' + wanted.join(' or ') + ' inside ' + asset);
-  if (process.platform !== 'win32') {
-    fs.chmodSync(bin, 0o755);
-  }
+  if (process.platform !== 'win32') fs.chmodSync(bin, 0o755);
   fs.writeFileSync(marker, actual + '\n');
   return bin;
+}
+
+function assetKey(algo, vendor) {
+  const plat = process.platform + '-' + os.arch();
+  if (algo === 'sha256d') return plat + '-' + (vendor === 'amd' ? 'amd' : 'nvidia');
+  return plat;
+}
+
+function binNames(algo, vendor) {
+  const bin = manifest.miners[algo].bin;
+  if (algo === 'sha256d') return [vendor === 'amd' ? bin.amd : bin.nvidia];
+  return [bin[process.platform] || bin.default];
+}
+
+function prepare(algo, vendor, baseDir, onStatus) {
+  const def = manifest.miners[algo];
+  const avail = availability(algo);
+  if (!avail.ok) return Promise.reject(new Error(def.name + ': ' + avail.why));
+  const home = path.join(baseDir, 'miners', algo, def.tag);
+  return prepareDef(def, def.assets[assetKey(algo, vendor)], binNames(algo, vendor), home, onStatus);
+}
+
+function prepareProxy(baseDir, onStatus) {
+  const def = manifest.proxy;
+  const plat = process.platform + '-' + os.arch();
+  const home = path.join(baseDir, 'proxy', def.tag);
+  return prepareDef(def, def.assets[plat], [def.bin[process.platform] || def.bin.default], home, onStatus);
+}
+
+// ---- ports ----------------------------------------------------------------
+
+function freePort(start) {
+  return new Promise((resolve, reject) => {
+    let candidate = start;
+    const attempt = () => {
+      const srv = net.createServer();
+      srv.once('error', () => {
+        candidate += 1;
+        if (candidate > start + 20) return reject(new Error('no free local port near ' + start));
+        attempt();
+      });
+      srv.listen(candidate, '127.0.0.1', () => {
+        srv.close(() => resolve(candidate));
+      });
+    };
+    attempt();
+  });
+}
+
+function waitForPort(port, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const attempt = () => {
+      const sock = net.connect(port, '127.0.0.1');
+      sock.once('connect', () => {
+        sock.destroy();
+        resolve();
+      });
+      sock.once('error', () => {
+        sock.destroy();
+        if (Date.now() > deadline) reject(new Error('the local proxy did not come up on port ' + port));
+        else setTimeout(attempt, 300);
+      });
+    };
+    attempt();
+  });
 }
 
 // ---- run ------------------------------------------------------------------
 
 const state = {
-  child: null,
-  algo: null,
+  miner: null,
+  proxy: null,
   stopping: false,
+  stopRequested: false,
   log: [],
+  blocks: 0,
+  emit: () => {},
 };
 
 function pushLog(line) {
   state.log.push(line);
-  if (state.log.length > 200) state.log.shift();
+  if (state.log.length > 300) state.log.shift();
 }
 
-async function start(cfg, opts) {
-  if (state.child) throw new Error('already mining, stop first');
-  const emit = opts.onEvent || (() => {});
-  const status = (text) => emit({ type: 'status', text });
-
-  const bin = await prepare(cfg.algo, cfg.vendor, opts.baseDir, status);
-  if (state.child) throw new Error('already mining, stop first');
-
-  const args = buildArgs(cfg.algo, cfg);
-  status('starting ' + path.basename(bin) + '...');
-
-  const env = { ...process.env };
-  if (cfg.algo === 'sha256d') env.LD_LIBRARY_PATH = path.dirname(bin) + ':' + (env.LD_LIBRARY_PATH || '');
-
-  const child = spawn(bin, args, { cwd: path.dirname(bin), env });
-  state.child = child;
-  state.algo = cfg.algo;
-  state.stopping = false;
-  state.log = [];
-
-  const parse = PARSERS[cfg.algo];
-  let sawRate = false;
+function lineReader(onLine) {
   let buffer = '';
-  const onData = (chunk) => {
+  return (chunk) => {
     buffer += chunk.toString();
     let idx;
     while ((idx = buffer.indexOf('\n')) !== -1) {
       const line = buffer.slice(0, idx).replace(/\x1b\[[0-9;]*m/g, '').trimEnd();
       buffer = buffer.slice(idx + 1);
-      if (!line) continue;
-      pushLog(line);
-      emit({ type: 'log', line });
-      const rate = parse(line);
-      if (rate !== null) {
-        if (!sawRate) {
-          sawRate = true;
-          status('mining');
-        }
-        emit({ type: 'hashrate', hs: rate });
-      }
+      if (line) onLine(line);
     }
   };
-  child.stdout.on('data', onData);
-  child.stderr.on('data', onData);
-
-  child.on('error', (err) => {
-    state.child = null;
-    emit({ type: 'error', text: 'could not start miner: ' + err.message });
-  });
-  child.on('exit', (code, signal) => {
-    const wasStopping = state.stopping;
-    state.child = null;
-    state.stopping = false;
-    if (wasStopping) {
-      emit({ type: 'stopped' });
-    } else {
-      const tail = state.log.slice(-3).join('\n');
-      emit({ type: 'error', text: 'miner exited (' + (signal || code) + ')' + (tail ? '\n' + tail : '') });
-    }
-  });
-
-  return { bin, args };
 }
 
-function stop() {
+function killChild(child) {
   return new Promise((resolve) => {
-    const child = state.child;
-    if (!child) return resolve();
-    state.stopping = true;
+    if (!child || child.exitCode !== null || child.signalCode) return resolve();
     child.once('exit', () => resolve());
     if (process.platform === 'win32') {
       execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {});
     } else {
       child.kill('SIGTERM');
-      setTimeout(() => {
-        if (state.child === child) child.kill('SIGKILL');
-      }, 4000).unref();
+      setTimeout(() => child.kill('SIGKILL'), 4000).unref();
     }
-    // never hang the caller more than 6 seconds
     setTimeout(resolve, 6000).unref();
   });
 }
 
+async function cleanupAfterFailure() {
+  state.stopping = true;
+  await killChild(state.miner);
+  await killChild(state.proxy);
+  state.miner = null;
+  state.proxy = null;
+  state.stopping = false;
+}
+
+function spawnMiner(cfg, bin) {
+  const emit = state.emit;
+  const args = buildArgs(cfg.algo, cfg);
+  emit({ type: 'status', text: 'starting ' + path.basename(bin) + '...' });
+
+  const env = { ...process.env };
+  if (cfg.algo === 'sha256d') env.LD_LIBRARY_PATH = path.dirname(bin) + ':' + (env.LD_LIBRARY_PATH || '');
+
+  const child = spawn(bin, args, { cwd: path.dirname(bin), env });
+  state.miner = child;
+
+  const parse = PARSERS[cfg.algo];
+  let sawRate = false;
+  const onData = lineReader((line) => {
+    pushLog(line);
+    emit({ type: 'log', src: 'miner', line });
+    const rate = parse(line);
+    if (rate !== null) {
+      if (!sawRate) {
+        sawRate = true;
+        emit({ type: 'status', text: cfg.mode === 'solo' ? 'mining solo' : 'mining' });
+      }
+      emit({ type: 'hashrate', hs: rate });
+    }
+  });
+  child.stdout.on('data', onData);
+  child.stderr.on('data', onData);
+
+  child.on('error', (err) => {
+    state.miner = null;
+    emit({ type: 'error', text: 'could not start miner: ' + err.message });
+  });
+  child.on('exit', (code, signal) => {
+    state.miner = null;
+    if (!state.stopping) {
+      const tail = state.log.slice(-3).join('\n');
+      emit({ type: 'error', text: 'miner exited (' + (signal || code) + ')' + (tail ? '\n' + tail : '') });
+      killChild(state.proxy).then(() => {
+        state.proxy = null;
+      });
+    }
+  });
+  return { bin, args };
+}
+
+function spawnProxy(bin, args) {
+  const emit = state.emit;
+  const child = spawn(bin, args, { cwd: path.dirname(bin) });
+  state.proxy = child;
+
+  const onData = lineReader((line) => {
+    pushLog('[proxy] ' + line);
+    emit({ type: 'log', src: 'proxy', line });
+    if (/Block accepted/.test(line)) {
+      state.blocks += 1;
+      emit({ type: 'block', count: state.blocks });
+    } else if (/Block rejected by node/.test(line)) {
+      emit({ type: 'status', text: 'a block was rejected by the node, see the log' });
+    } else if (/getblocktemplate failed/.test(line)) {
+      emit({ type: 'status', text: 'the node stopped serving work, check veild' });
+    }
+  });
+  child.stdout.on('data', onData);
+  child.stderr.on('data', onData);
+
+  child.on('error', (err) => {
+    state.proxy = null;
+    emit({ type: 'error', text: 'could not start the proxy: ' + err.message });
+  });
+  child.on('exit', (code, signal) => {
+    state.proxy = null;
+    if (!state.stopping) {
+      const tail = state.log.slice(-3).join('\n');
+      emit({ type: 'error', text: 'the solo proxy exited (' + (signal || code) + ')' + (tail ? '\n' + tail : '') });
+      killChild(state.miner).then(() => {
+        state.miner = null;
+      });
+    }
+  });
+}
+
+async function start(cfg, opts) {
+  if (state.miner || state.proxy) throw new Error('already mining, stop first');
+  state.emit = opts.onEvent || (() => {});
+  state.log = [];
+  state.blocks = 0;
+  state.stopping = false;
+  state.stopRequested = false;
+  const status = (text) => state.emit({ type: 'status', text });
+  // a stop that lands during the async prepare steps must not be outraced
+  const bail = () => {
+    if (state.stopRequested) throw new Error('stopped');
+    if (state.miner || state.proxy) throw new Error('already mining, stop first');
+  };
+
+  if (cfg.mode !== 'solo') {
+    const bin = await prepare(cfg.algo, cfg.vendor, opts.baseDir, status);
+    bail();
+    return spawnMiner(cfg, bin);
+  }
+
+  // solo: preflight the node, run the proxy, point the miner at it
+  status('checking the node...');
+  const pf = await noderpc.preflight(cfg.node, cfg.algo, cfg.network);
+  const shareDiff = pickShareDiff(cfg.algo, pf.netDiff);
+
+  const minerBin = await prepare(cfg.algo, cfg.vendor, opts.baseDir, status);
+  const proxyBin = await prepareProxy(opts.baseDir, status);
+  bail();
+
+  const port = await freePort(43333);
+  const nodeUrl =
+    'http://' +
+    encodeURIComponent(cfg.node.user || '') +
+    ':' +
+    encodeURIComponent(cfg.node.pass || '') +
+    '@' +
+    (cfg.node.host || '127.0.0.1') +
+    ':' +
+    cfg.node.port;
+
+  status('starting the solo proxy on 127.0.0.1:' + port + '...');
+  spawnProxy(proxyBin, buildProxyArgs(cfg.algo, port, nodeUrl, shareDiff));
+  try {
+    await waitForPort(port, 15000);
+  } catch (err) {
+    const tail = state.log.slice(-4).join('\n');
+    await cleanupAfterFailure();
+    throw new Error(err.message + (tail ? '\n' + tail : ''));
+  }
+  if (state.stopRequested) {
+    await cleanupAfterFailure();
+    throw new Error('stopped');
+  }
+
+  return spawnMiner({ ...cfg, host: '127.0.0.1', port }, minerBin);
+}
+
+async function stop() {
+  state.stopRequested = true;
+  state.stopping = true;
+  await killChild(state.miner);
+  state.miner = null;
+  await killChild(state.proxy);
+  state.proxy = null;
+  state.stopping = false;
+  state.emit({ type: 'stopped' });
+}
+
 function isMining() {
-  return !!state.child;
+  return !!(state.miner || state.proxy);
 }
 
 module.exports = {
@@ -329,8 +500,11 @@ module.exports = {
   stop,
   isMining,
   prepare,
+  prepareProxy,
   availability,
   buildArgs,
+  buildProxyArgs,
+  pickShareDiff,
   parsers: PARSERS,
   manifest,
 };

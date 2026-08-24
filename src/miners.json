@@ -1,5 +1,18 @@
 {
   "updated": "2026-08-24",
+  "proxy": {
+    "name": "veilproxy",
+    "repo": "ohcee/veil-node-stratum-proxy",
+    "tag": "v3.0.1",
+    "sums": "SHA256SUMS.txt",
+    "assets": {
+      "win32-x64": "veilproxy-windows.zip",
+      "linux-x64": "veilproxy-linux.tar.gz",
+      "darwin-arm64": "veilproxy-macos.tar.gz",
+      "darwin-x64": "veilproxy-macos.tar.gz"
+    },
+    "bin": { "win32": "veilproxy.exe", "default": "veilproxy" }
+  },
   "miners": {
     "randomx": {
       "name": "Veil-Miner-CPU",

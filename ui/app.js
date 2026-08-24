@@ -193,31 +193,40 @@ async function onStart() {
   }
   if (state.busy) return;
 
-  if (state.mode === 'solo') {
-    setStatus('solo needs the local proxy, that is the next milestone', 'warn');
-    return;
-  }
-  const matching = matchingPools();
-  const pool = matching[parseInt($('pool-select').value, 10)] || matching[0];
-  if (!pool) {
-    setStatus('no pool available for this algo yet', 'warn');
-    return;
-  }
-  if (state.network !== 'mainnet') {
-    setStatus('pools pay out on mainnet, use a bv1 address', 'warn');
-    return;
+  const cfg = {
+    mode: state.mode,
+    algo: state.algo,
+    network: state.network,
+    address: $('address').value.trim(),
+    vendor: primaryVendor(),
+  };
+  if (state.mode === 'pool') {
+    const matching = matchingPools();
+    const pool = matching[parseInt($('pool-select').value, 10)] || matching[0];
+    if (!pool) {
+      setStatus('no pool available for this algo yet', 'warn');
+      return;
+    }
+    if (state.network !== 'mainnet') {
+      setStatus('pools pay out on mainnet, use a bv1 address', 'warn');
+      return;
+    }
+    cfg.host = pool.host;
+    cfg.port = pool.port;
+  } else {
+    cfg.node = {
+      host: $('rpc-host').value.trim(),
+      port: $('rpc-port').value.trim(),
+      user: $('rpc-user').value.trim(),
+      pass: $('rpc-pass').dataset.fromConf === '1' ? null : $('rpc-pass').value,
+      passFromConf: $('rpc-pass').dataset.fromConf === '1',
+    };
   }
 
   state.busy = true;
   updateStart();
   setStatus('getting ready...');
-  const res = await window.qm.startMining({
-    algo: state.algo,
-    address: $('address').value.trim(),
-    host: pool.host,
-    port: pool.port,
-    vendor: primaryVendor(),
-  });
+  const res = await window.qm.startMining(cfg);
   state.busy = false;
   if (res.ok) {
     setMiningUi(true);
@@ -229,7 +238,9 @@ async function onStart() {
 
 function onMiningEvent(ev) {
   if (ev.type === 'status') {
-    setStatus(ev.text, ev.text === 'mining' ? 'ok' : '');
+    setStatus(ev.text, /^mining/.test(ev.text) ? 'ok' : '');
+  } else if (ev.type === 'block') {
+    setStatus('block found! ' + ev.count + ' this session 🎉', 'ok');
   } else if (ev.type === 'hashrate') {
     const r = formatRate(ev.hs);
     $('hashrate').textContent = r.v;
@@ -245,6 +256,10 @@ function onMiningEvent(ev) {
 
 async function init() {
   $('address').addEventListener('input', onAddressInput);
+  // typing a password by hand overrides whatever Find my node loaded
+  $('rpc-pass').addEventListener('input', () => {
+    $('rpc-pass').dataset.fromConf = '';
+  });
   $('mode-pool').addEventListener('click', () => setMode('pool'));
   $('mode-solo').addEventListener('click', () => setMode('solo'));
   $('find-node').addEventListener('click', findNode);
