@@ -5,8 +5,8 @@ const fs = require('fs');
 const bech32 = require('./src/bech32');
 const hardware = require('./src/hardware');
 const veilconf = require('./src/veilconf');
+const minerman = require('./src/minerman');
 const pools = require('./src/pools.json');
-const miners = require('./src/miners.json');
 
 const SMOKE = !!process.env.QUICKMINER_SMOKE;
 let win = null;
@@ -45,15 +45,30 @@ ipcMain.handle('read-veil-conf', () => {
   return { ...conf, pass: undefined, passSet: !!conf.pass };
 });
 ipcMain.handle('get-pools', () => pools);
-ipcMain.handle('get-miners', () => miners);
-ipcMain.handle('start-mining', (e, cfg) => {
-  // milestone 2 wires this to the real miner manager
-  return {
-    ok: false,
-    reason: 'interface preview: miner download and launch land in the next milestone',
-  };
+ipcMain.handle('get-miners', () => {
+  const out = {};
+  for (const algo of Object.keys(minerman.manifest.miners)) {
+    out[algo] = { ...minerman.manifest.miners[algo], availability: minerman.availability(algo) };
+  }
+  return out;
 });
-ipcMain.handle('stop-mining', () => ({ ok: true }));
+ipcMain.handle('start-mining', async (e, cfg) => {
+  try {
+    await minerman.start(cfg, {
+      baseDir: app.getPath('userData'),
+      onEvent: (ev) => {
+        if (win && !win.isDestroyed()) win.webContents.send('mining-event', ev);
+      },
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+});
+ipcMain.handle('stop-mining', async () => {
+  await minerman.stop();
+  return { ok: true };
+});
 
 async function smokeRun() {
   const errors = [];
@@ -101,6 +116,22 @@ async function smokeRun() {
           'el.dispatchEvent(new Event("input", { bubbles: true })); true'
       );
       await new Promise((r) => setTimeout(r, 700));
+
+      // optional live phase: press start for real and wait for a hashrate
+      if (checksOk && process.env.QUICKMINER_SMOKE_LIVE) {
+        await win.webContents.executeJavaScript('document.getElementById("start").click(); true');
+        const liveDeadline = Date.now() + 240000;
+        let rate = '0';
+        while (Date.now() < liveDeadline) {
+          rate = await win.webContents.executeJavaScript('document.getElementById("hashrate").textContent');
+          if (rate !== '0') break;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        if (rate === '0') {
+          checksOk = false;
+          detail = 'live phase: no hashrate before deadline';
+        }
+      }
     } catch (err) {
       detail = String(err);
     }
@@ -112,6 +143,10 @@ async function smokeRun() {
     fs.writeFileSync(shot, img.toPNG());
   } catch (err) {
     errors.push('screenshot failed: ' + err.message);
+  }
+
+  if (process.env.QUICKMINER_SMOKE_LIVE && minerman.isMining()) {
+    await minerman.stop();
   }
 
   if (!ready) {
@@ -139,4 +174,11 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('will-quit', (e) => {
+  if (minerman.isMining()) {
+    e.preventDefault();
+    minerman.stop().then(() => app.quit());
+  }
 });

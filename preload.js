@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('qm', {
   getMiners: () => ipcRenderer.invoke('get-miners'),
   startMining: (cfg) => ipcRenderer.invoke('start-mining', cfg),
   stopMining: () => ipcRenderer.invoke('stop-mining'),
+  onMiningEvent: (cb) => {
+    ipcRenderer.on('mining-event', (e, ev) => cb(ev));
+  },
 });

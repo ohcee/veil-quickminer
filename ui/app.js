@@ -3,7 +3,7 @@
 const ALGOS = [
   { id: 'randomx', title: 'RandomX', sub: 'CPU, every machine can mine this', miner: 'Veil-Miner-CPU', needs: 'cpu' },
   { id: 'progpow', title: 'ProgPoW', sub: 'GPU, NVIDIA or AMD', miner: 'Veil-Miner', needs: 'gpu' },
-  { id: 'sha256d', title: 'SHA256d', sub: 'GPU, NVIDIA only for now', miner: 'Veil-Miner-SHA', needs: 'nvidia' },
+  { id: 'sha256d', title: 'SHA256d', sub: 'GPU, NVIDIA or AMD', miner: 'Veil-Miner-SHA', needs: 'gpu' },
 ];
 
 const state = {
@@ -13,24 +13,30 @@ const state = {
   algo: null,
   hw: null,
   pools: [],
+  miners: {},
   mining: false,
+  busy: false,
 };
 
 const $ = (id) => document.getElementById(id);
 
-function eligible(algo, hw) {
-  if (!hw) return true;
-  if (algo.needs === 'cpu') return true;
-  if (algo.needs === 'gpu') return hw.gpus.length > 0;
-  if (algo.needs === 'nvidia') return hw.gpus.some((g) => g.vendor === 'nvidia');
-  return true;
+function algoFlag(algo) {
+  const info = state.miners[algo.id];
+  if (info && info.availability && !info.availability.ok) {
+    return { ok: false, text: info.availability.why };
+  }
+  if (!state.hw) return { ok: true, text: 'ready' };
+  if (algo.needs === 'gpu' && !state.hw.gpus.length) {
+    return { ok: false, text: 'no matching hardware' };
+  }
+  return { ok: true, text: 'ready' };
 }
 
 function renderAlgos() {
   const wrap = $('algo-cards');
   wrap.innerHTML = '';
   for (const algo of ALGOS) {
-    const ok = eligible(algo, state.hw);
+    const flag = algoFlag(algo);
     const el = document.createElement('div');
     el.className = 'algo' + (state.algo === algo.id ? ' selected' : '');
     el.dataset.algo = algo.id;
@@ -47,12 +53,13 @@ function renderAlgos() {
     miner.textContent = algo.miner;
     left.append(name, sub, miner);
 
-    const flag = document.createElement('div');
-    flag.className = 'flag ' + (ok ? 'ok' : 'warn');
-    flag.textContent = ok ? 'ready' : 'no matching hardware';
+    const flagEl = document.createElement('div');
+    flagEl.className = 'flag ' + (flag.ok ? 'ok' : 'warn');
+    flagEl.textContent = flag.text;
 
-    el.append(left, flag);
+    el.append(left, flagEl);
     el.addEventListener('click', () => {
+      if (state.mining || state.busy) return;
       state.algo = algo.id;
       renderAlgos();
       renderPools();
@@ -62,31 +69,34 @@ function renderAlgos() {
   }
 }
 
+function matchingPools() {
+  return state.pools.filter((p) => !state.algo || p.algo === state.algo);
+}
+
 function renderPools() {
   const select = $('pool-select');
   const hint = $('pool-hint');
   select.innerHTML = '';
-  const matching = state.pools.filter((p) => !state.algo || p.algo === state.algo);
+  const matching = matchingPools();
   if (!matching.length) {
     const opt = document.createElement('option');
     opt.textContent = state.algo ? 'no known pool for this algo yet' : 'pick an algo first';
     opt.value = '';
     select.appendChild(opt);
-    hint.textContent = state.algo === 'sha256d' ? 'nobody pools SHA256d yet, solo is the way there' : '';
+    hint.textContent = '';
     return;
   }
-  for (const p of matching) {
+  matching.forEach((p, i) => {
     const opt = document.createElement('option');
-    opt.value = p.name;
-    opt.textContent = p.name + (p.stratum ? '' : ' (stratum url pending)');
+    opt.value = String(i);
+    opt.textContent = p.name + ' · ' + p.host + ':' + p.port;
     select.appendChild(opt);
-  }
-  hint.textContent = matching.some((p) => !p.verified)
-    ? 'pool endpoints get verified when the miner manager lands'
-    : '';
+  });
+  hint.textContent = 'pools pay out on mainnet, so use a bv1 address';
 }
 
 function setMode(mode) {
+  if (state.mining || state.busy) return;
   state.mode = mode;
   $('mode-pool').classList.toggle('active', mode === 'pool');
   $('mode-solo').classList.toggle('active', mode === 'solo');
@@ -96,7 +106,35 @@ function setMode(mode) {
 }
 
 function updateStart() {
-  $('start').disabled = state.mining ? false : !(state.addressValid && state.algo);
+  if (state.mining || state.busy) {
+    $('start').disabled = state.busy && !state.mining;
+    return;
+  }
+  $('start').disabled = !(state.addressValid && state.algo);
+}
+
+function formatRate(hs) {
+  if (hs >= 1e9) return { v: (hs / 1e9).toFixed(2), u: 'GH/s' };
+  if (hs >= 1e6) return { v: (hs / 1e6).toFixed(2), u: 'MH/s' };
+  if (hs >= 1e3) return { v: (hs / 1e3).toFixed(2), u: 'kH/s' };
+  return { v: hs.toFixed(1), u: 'H/s' };
+}
+
+function setStatus(text, cls) {
+  const status = $('status');
+  status.className = 'msg' + (cls ? ' ' + cls : '');
+  status.textContent = text;
+}
+
+function setMiningUi(mining) {
+  state.mining = mining;
+  $('start').textContent = mining ? 'Stop mining' : 'Start mining';
+  $('start').classList.toggle('stop', mining);
+  if (!mining) {
+    $('hashrate').textContent = '0';
+    $('rate-unit').textContent = 'H/s';
+  }
+  updateStart();
 }
 
 let debounceTimer = null;
@@ -142,44 +180,66 @@ async function findNode() {
     : 'loaded rpc settings from veil.conf';
 }
 
+function primaryVendor() {
+  if (!state.hw || !state.hw.gpus.length) return null;
+  return state.hw.gpus.some((g) => g.vendor === 'nvidia') ? 'nvidia' : state.hw.gpus[0].vendor;
+}
+
 async function onStart() {
-  const status = $('status');
   if (state.mining) {
+    setStatus('stopping...');
     await window.qm.stopMining();
-    state.mining = false;
-    $('start').textContent = 'Start mining';
-    $('start').classList.remove('stop');
-    status.className = 'msg';
-    status.textContent = 'stopped';
-    updateStart();
     return;
   }
-  const cfg = {
-    address: $('address').value.trim(),
-    network: state.network,
-    mode: state.mode,
+  if (state.busy) return;
+
+  if (state.mode === 'solo') {
+    setStatus('solo needs the local proxy, that is the next milestone', 'warn');
+    return;
+  }
+  const matching = matchingPools();
+  const pool = matching[parseInt($('pool-select').value, 10)] || matching[0];
+  if (!pool) {
+    setStatus('no pool available for this algo yet', 'warn');
+    return;
+  }
+  if (state.network !== 'mainnet') {
+    setStatus('pools pay out on mainnet, use a bv1 address', 'warn');
+    return;
+  }
+
+  state.busy = true;
+  updateStart();
+  setStatus('getting ready...');
+  const res = await window.qm.startMining({
     algo: state.algo,
-    pool: state.mode === 'pool' ? $('pool-select').value : null,
-    node:
-      state.mode === 'solo'
-        ? {
-            host: $('rpc-host').value.trim() || '127.0.0.1',
-            port: $('rpc-port').value.trim(),
-            user: $('rpc-user').value.trim(),
-            passFromConf: $('rpc-pass').dataset.fromConf === '1',
-          }
-        : null,
-  };
-  const res = await window.qm.startMining(cfg);
+    address: $('address').value.trim(),
+    host: pool.host,
+    port: pool.port,
+    vendor: primaryVendor(),
+  });
+  state.busy = false;
   if (res.ok) {
-    state.mining = true;
-    $('start').textContent = 'Stop mining';
-    $('start').classList.add('stop');
-    status.className = 'msg ok';
-    status.textContent = 'mining';
+    setMiningUi(true);
   } else {
-    status.className = 'msg warn';
-    status.textContent = res.reason;
+    setMiningUi(false);
+    setStatus(res.reason, 'err');
+  }
+}
+
+function onMiningEvent(ev) {
+  if (ev.type === 'status') {
+    setStatus(ev.text, ev.text === 'mining' ? 'ok' : '');
+  } else if (ev.type === 'hashrate') {
+    const r = formatRate(ev.hs);
+    $('hashrate').textContent = r.v;
+    $('rate-unit').textContent = r.u;
+  } else if (ev.type === 'error') {
+    setMiningUi(false);
+    setStatus(ev.text, 'err');
+  } else if (ev.type === 'stopped') {
+    setMiningUi(false);
+    setStatus('stopped');
   }
 }
 
@@ -189,11 +249,13 @@ async function init() {
   $('mode-solo').addEventListener('click', () => setMode('solo'));
   $('find-node').addEventListener('click', findNode);
   $('start').addEventListener('click', onStart);
+  window.qm.onMiningEvent(onMiningEvent);
 
   renderAlgos();
 
   const poolData = await window.qm.getPools();
   state.pools = poolData.pools || [];
+  state.miners = await window.qm.getMiners();
 
   const hw = await window.qm.detectHardware();
   state.hw = hw;

@@ -1,27 +1,41 @@
 {
-  "note": "release sources for the miner manager milestone, repos and asset patterns get pinned down before downloads are wired up",
+  "updated": "2026-08-24",
   "miners": {
     "randomx": {
       "name": "Veil-Miner-CPU",
-      "kind": "cpu",
-      "repo": null,
-      "release": null,
-      "checksums": "SHA256SUMS.txt"
+      "repo": "ohcee/Veil-Miner-CPU",
+      "tag": "v6.25.0-veil-rc1",
+      "sums": "SHA256SUMS.txt",
+      "assets": {
+        "win32-x64": "xmrig-v6.25.0-veil-rc1-windows-x64.zip",
+        "linux-x64": "xmrig-v6.25.0-veil-rc1-linux-x64.tar.gz",
+        "darwin-arm64": "xmrig-v6.25.0-veil-rc1-macos-arm64.tar.gz",
+        "darwin-x64": "xmrig-v6.25.0-veil-rc1-macos-x64.tar.gz"
+      },
+      "bin": { "win32": "xmrig.exe", "default": "xmrig" }
     },
     "progpow": {
       "name": "Veil-Miner",
-      "kind": "gpu",
       "repo": "Veil-Project/Veil-Miner",
-      "release": "v1.1.3",
-      "checksums": "SHA256SUMS.txt"
+      "tag": "v1.1.3",
+      "sums": "SHA256SUMS.txt",
+      "assets": {
+        "win32-x64": "veilminer-v1.1.3-windows-x64-cuda12.9.zip",
+        "linux-x64": "veilminer-v1.1.3-linux-x64-cuda12.9.tar.gz",
+        "darwin-arm64": "veilminer-v1.1.3-macos-arm64.tar.gz"
+      },
+      "bin": { "win32": "veilminer.exe", "default": "veilminer" }
     },
     "sha256d": {
       "name": "Veil-Miner-SHA",
-      "kind": "gpu",
-      "repo": null,
-      "release": null,
-      "checksums": null,
-      "todo": "needs a public release with checksums first"
+      "repo": "ohcee/Veil-Miner-SHA",
+      "tag": "v0.1.7",
+      "sums": "SHA256SUMS.txt",
+      "assets": {
+        "linux-x64-nvidia": "veil-miner-sha-nvidia-linux-x64.tar.gz",
+        "linux-x64-amd": "veil-miner-sha-amd-linux-x64.tar.gz"
+      },
+      "bin": { "nvidia": "ccminer", "amd": "veil-miner-sha-amd", "default": "ccminer" }
     }
   }
 }

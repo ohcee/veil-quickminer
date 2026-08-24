@@ -1,20 +1,46 @@
 {
-  "updated": "2026-08-23",
-  "note": "stratum urls are unverified placeholders until the miner manager milestone, the app blocks start on any entry without a verified stratum url",
+  "updated": "2026-08-24",
+  "note": "endpoints verified against mining.veil-info.org, the curated list the community already uses",
   "pools": [
     {
-      "name": "Fastpool",
-      "algo": "randomx",
-      "stratum": null,
-      "web": "https://fastpool.xyz",
-      "verified": false
+      "name": "yadaminers",
+      "algo": "sha256d",
+      "host": "veil.yadaminers.pl",
+      "port": 3333,
+      "web": "https://veil.yadaminers.pl",
+      "verified": true
     },
     {
-      "name": "Yadaminers",
+      "name": "yadaminers",
       "algo": "progpow",
-      "stratum": null,
-      "web": null,
-      "verified": false
+      "host": "veil.yadaminers.pl",
+      "port": 3334,
+      "web": "https://veil.yadaminers.pl",
+      "verified": true
+    },
+    {
+      "name": "yadaminers",
+      "algo": "randomx",
+      "host": "veil.yadaminers.pl",
+      "port": 3335,
+      "web": "https://veil.yadaminers.pl",
+      "verified": true
+    },
+    {
+      "name": "FastPool, easy diff",
+      "algo": "randomx",
+      "host": "fastpool.xyz",
+      "port": 10281,
+      "web": "https://fastpool.xyz/veil-rx/",
+      "verified": true
+    },
+    {
+      "name": "FastPool, high diff",
+      "algo": "randomx",
+      "host": "fastpool.xyz",
+      "port": 10282,
+      "web": "https://fastpool.xyz/veil-rx/",
+      "verified": true
     }
   ]
 }
