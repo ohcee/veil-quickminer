@@ -3,7 +3,10 @@
   "version": "0.3.0",
   "description": "One click mining for Veil. Paste an address, pick solo or pool, hit start.",
   "main": "main.js",
-  "author": "ohcee",
+  "author": {
+    "name": "ohcee",
+    "email": "46406370+ohcee@users.noreply.github.com"
+  },
   "homepage": "https://mining.veil-info.org",
   "scripts": {
     "start": "electron .",
