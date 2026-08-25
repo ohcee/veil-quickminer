@@ -117,19 +117,44 @@ function missingLibHint(logLines) {
 
 // ---- command lines, straight from the field tested hub recipes ------------
 
+// Intensity presets mapped to each miner's native knob. 'auto' (or unset)
+// means no flag, let the miner decide. sha256d -> ccminer -i (8-25);
+// progpow -> veilminer --cuda-grid-size.
+const INTENSITY = {
+  sha256d: { low: '18', medium: '21', high: '23', max: '25' },
+  progpow: { low: '2048', medium: '4096', high: '8192', max: '16384' },
+};
+
 function buildArgs(algo, cfg) {
   const url = 'stratum+tcp://' + cfg.host + ':' + cfg.port;
+  const devices = Array.isArray(cfg.devices) && cfg.devices.length ? cfg.devices : null;
+  const intensity = cfg.intensity && cfg.intensity !== 'auto' ? cfg.intensity : null;
+
   if (algo === 'randomx') {
+    // RandomX is CPU, no GPU tuning; xmrig auto-configures the threads
     return ['-o', cfg.host + ':' + cfg.port, '-a', 'rx/veil', '-u', cfg.address, '-p', 'x', '--no-color', '--print-time', '10'];
   }
   if (algo === 'progpow') {
     const flag = cfg.vendor === 'nvidia' ? '--cuda' : cfg.vendor === 'amd' ? '--opencl' : '--cpu';
-    return [flag, '-P', 'stratum+tcp://' + cfg.address + '@' + cfg.host + ':' + cfg.port];
+    const args = [flag, '-P', 'stratum+tcp://' + cfg.address + '@' + cfg.host + ':' + cfg.port];
+    if (cfg.vendor === 'nvidia') {
+      if (devices) args.push('--cuda-devices', ...devices.map(String));
+      const g = intensity && INTENSITY.progpow[intensity];
+      if (g) args.push('--cuda-grid-size', g);
+    }
+    return args;
   }
   if (algo === 'sha256d') {
     // the amd build is single algo and takes no -a flag
-    if (cfg.vendor === 'amd') return ['-o', url, '-u', cfg.address, '-p', 'x'];
-    return ['-a', 'sha256dv', '-o', url, '-u', cfg.address, '-p', 'x'];
+    const args = cfg.vendor === 'amd'
+      ? ['-o', url, '-u', cfg.address, '-p', 'x']
+      : ['-a', 'sha256dv', '-o', url, '-u', cfg.address, '-p', 'x'];
+    if (cfg.vendor !== 'amd') {
+      if (devices) args.push('-d', devices.join(','));
+      const i = intensity && INTENSITY.sha256d[intensity];
+      if (i) args.push('-i', i);
+    }
+    return args;
   }
   throw new Error('unknown algo ' + algo);
 }
@@ -420,6 +445,8 @@ function spawnMiner(cfg, bin) {
 
   const env = { ...process.env };
   if (cfg.algo === 'sha256d') env.LD_LIBRARY_PATH = path.dirname(bin) + ':' + (env.LD_LIBRARY_PATH || '');
+  // so the device-picker indices line up with what nvidia-smi shows the user
+  if (cfg.algo === 'progpow' || cfg.algo === 'sha256d') env.CUDA_DEVICE_ORDER = 'PCI_BUS_ID';
 
   const child = spawn(bin, args, { cwd: path.dirname(bin), env });
   state.miner = child;
@@ -585,5 +612,6 @@ module.exports = {
   shareParsers: SHARE_PARSERS,
   missingLibHint,
   aptPackageFor,
+  INTENSITY,
   manifest,
 };

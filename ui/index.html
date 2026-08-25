@@ -50,6 +50,25 @@
       <div id="hw-line" class="hint">detecting hardware...</div>
     </section>
 
+    <section class="card hidden" id="tuning-card">
+      <label>GPU tuning</label>
+      <div class="tune-row">
+        <span class="tune-label">Cards</span>
+        <div id="device-list" class="devices"></div>
+      </div>
+      <div class="tune-row">
+        <span class="tune-label">Intensity</span>
+        <div class="seg small" id="intensity-seg">
+          <button type="button" class="segbtn active" data-i="auto">Auto</button>
+          <button type="button" class="segbtn" data-i="low">Low</button>
+          <button type="button" class="segbtn" data-i="medium">Med</button>
+          <button type="button" class="segbtn" data-i="high">High</button>
+          <button type="button" class="segbtn" data-i="max">Max</button>
+        </div>
+      </div>
+      <div class="hint">higher intensity means more hashrate and more heat; Auto lets the miner decide</div>
+    </section>
+
     <section class="card run">
       <button id="start" type="button" disabled>Start mining</button>
       <div class="rate">

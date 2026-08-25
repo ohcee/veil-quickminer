@@ -110,6 +110,19 @@ input.err { border-color: var(--bad); }
 .algo .flag.ok { color: var(--good); }
 .algo .flag.warn { color: var(--warn); }
 
+.tune-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.tune-label { font-size: 12px; font-weight: 600; color: var(--muted); width: 64px; flex: none; }
+.devices { display: flex; flex-wrap: wrap; gap: 6px; }
+.dev {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px;
+  font-size: 12px; cursor: pointer; background: #fbfcfe;
+}
+.dev.on { border-color: var(--accent); background: rgba(43, 107, 243, 0.06); color: var(--ink); }
+.dev input { width: auto; margin: 0; }
+.seg.small { margin-bottom: 0; flex: 1; }
+.seg.small .segbtn { padding: 6px 0; font-size: 12.5px; }
+
 .run { text-align: center; }
 #start {
   width: 100%;

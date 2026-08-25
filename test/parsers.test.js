@@ -101,4 +101,24 @@ ok('normal exit has no lib hint', () => {
   assert.strictEqual(missingLibHint(['miner    speed 10s/60s/15m 3834.9 H/s', 'net new job']), null);
 });
 
+ok('gpu tuning: sha256d device list and intensity', () => {
+  const base = { address: 'bv1q', host: 'h', port: 3333, vendor: 'nvidia' };
+  const plain = buildArgs('sha256d', base);
+  assert(!plain.includes('-d') && !plain.includes('-i'), 'no tuning when unset');
+  const tuned = buildArgs('sha256d', { ...base, devices: [0, 2, 3], intensity: 'high' });
+  assert.deepStrictEqual(tuned.slice(-4), ['-d', '0,2,3', '-i', '23']);
+  // auto intensity adds no flag
+  assert(!buildArgs('sha256d', { ...base, intensity: 'auto' }).includes('-i'));
+});
+
+ok('gpu tuning: progpow cuda devices and grid size', () => {
+  const base = { address: 'bv1q', host: 'h', port: 3334, vendor: 'nvidia' };
+  const tuned = buildArgs('progpow', { ...base, devices: [1, 2], intensity: 'max' });
+  const j = tuned.join(' ');
+  assert(j.includes('--cuda-devices 1 2'), j);
+  assert(j.includes('--cuda-grid-size 16384'), j);
+  // amd path takes no cuda tuning
+  assert(!buildArgs('progpow', { ...base, vendor: 'amd', devices: [0], intensity: 'high' }).join(' ').includes('cuda-devices'));
+});
+
 console.log(passed + ' checks passed');

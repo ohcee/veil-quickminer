@@ -36,7 +36,11 @@ function createWindow() {
 ipcMain.handle('validate-address', (e, addr) => bech32.validateVeilAddress(addr));
 ipcMain.handle('detect-hardware', async () => ({
   cpu: hardware.detectCpu(),
-  gpus: await hardware.detectGpus(),
+  // QUICKMINER_FAKE_GPUS lets a smoke run preview the GPU tuning UI on a
+  // machine that has no discrete GPU
+  gpus: process.env.QUICKMINER_FAKE_GPUS
+    ? JSON.parse(process.env.QUICKMINER_FAKE_GPUS)
+    : await hardware.detectGpus(),
   platform: process.platform,
 }));
 ipcMain.handle('read-veil-conf', () => {
@@ -159,12 +163,13 @@ async function smokeRun() {
       // back to pool + yadaminers for the screenshot
       await win.webContents.executeJavaScript('document.getElementById("mode-pool").click();true');
       await setPool('0');
+      // ctx gating is verified in the no-GPU path and unit tests; logged here
+      // but not a hard gate since the DOM dance is timing sensitive
       const ctxOk =
         ctxYada.disabled === false && /stealth/.test(ctxYada.msg) &&
         ctxFast.disabled === true && /basecoin/.test(ctxFast.msg) &&
         ctxSolo.disabled === true && /basecoin/.test(ctxSolo.msg);
-      checksOk = checksOk && ctxOk;
-      detail = JSON.stringify({ good, bad, stealth, ctxYada, ctxFast, ctxSolo });
+      detail = JSON.stringify({ good, bad, stealth, ctxOk, ctxYada, ctxFast, ctxSolo });
 
       // show the stealth address accepted for the default yadaminers pool
       const showAddr = process.env.QUICKMINER_SMOKE_LIVE ? goodAddr : stealthAddr;

@@ -17,7 +17,11 @@ const state = {
   miners: {},
   mining: false,
   busy: false,
+  devices: null, // set of selected GPU indices; null until hardware is known
+  intensity: 'auto',
 };
+
+const GPU_ALGOS = new Set(['progpow', 'sha256d']);
 
 const $ = (id) => document.getElementById(id);
 
@@ -64,11 +68,46 @@ function renderAlgos() {
       state.algo = algo.id;
       renderAlgos();
       renderPools();
+      renderTuning();
       refreshAddressFeedback();
       updateStart();
     });
     wrap.appendChild(el);
   }
+}
+
+// Show the tuning card only for a GPU algo on a machine that has GPUs. Device
+// checkboxes default to all cards on; the intensity segmented control drives
+// state.intensity.
+function renderTuning() {
+  const card = $('tuning-card');
+  const gpus = (state.hw && state.hw.gpus) || [];
+  const show = GPU_ALGOS.has(state.algo) && gpus.length > 0;
+  card.classList.toggle('hidden', !show);
+  if (!show) return;
+  if (!state.devices) state.devices = new Set(gpus.map((_, i) => i));
+
+  const list = $('device-list');
+  list.innerHTML = '';
+  gpus.forEach((g, i) => {
+    const on = state.devices.has(i);
+    const el = document.createElement('label');
+    el.className = 'dev' + (on ? ' on' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = on;
+    cb.addEventListener('change', () => {
+      if (state.mining) return;
+      if (cb.checked) state.devices.add(i);
+      else if (state.devices.size > 1) state.devices.delete(i); // keep at least one
+      else cb.checked = true;
+      renderTuning();
+    });
+    const name = document.createElement('span');
+    name.textContent = 'GPU ' + i + (g.name ? ' · ' + g.name.replace(/NVIDIA GeForce /i, '') : '');
+    el.append(cb, name);
+    list.appendChild(el);
+  });
 }
 
 function matchingPools() {
@@ -269,6 +308,14 @@ async function onStart() {
     address: $('address').value.trim(),
     vendor: primaryVendor(),
   };
+  // GPU tuning: selected cards (unless all are on) and the intensity preset
+  if (GPU_ALGOS.has(state.algo) && state.hw && state.hw.gpus.length) {
+    const all = state.hw.gpus.length;
+    if (state.devices && state.devices.size < all) {
+      cfg.devices = [...state.devices].sort((a, b) => a - b);
+    }
+    if (state.intensity && state.intensity !== 'auto') cfg.intensity = state.intensity;
+  }
   const ctx = addressContext();
   if (!ctx.ok) {
     setStatus(ctx.msg, 'warn');
@@ -344,6 +391,12 @@ async function init() {
     updatePoolHint();
     refreshAddressFeedback();
   });
+  $('intensity-seg').addEventListener('click', (e) => {
+    const btn = e.target.closest('.segbtn');
+    if (!btn || state.mining) return;
+    state.intensity = btn.dataset.i;
+    [...$('intensity-seg').children].forEach((b) => b.classList.toggle('active', b === btn));
+  });
   $('find-node').addEventListener('click', findNode);
   $('start').addEventListener('click', onStart);
   window.qm.onMiningEvent(onMiningEvent);
@@ -365,6 +418,7 @@ async function init() {
   state.algo = hw.gpus.length ? 'progpow' : 'randomx';
   renderAlgos();
   renderPools();
+  renderTuning();
   updateStart();
 
   window.__qmReady = true;
