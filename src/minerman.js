@@ -77,6 +77,44 @@ function sharesCcminer(line) {
 
 const SHARE_PARSERS = { randomx: sharesXmrig, progpow: sharesVeilminer, sha256d: sharesCcminer };
 
+// ---- turn a Linux "missing shared library" crash into an install hint ------
+
+// map a missing .so to the Debian/Ubuntu package that provides it
+function aptPackageFor(lib) {
+  const known = {
+    'libhwloc.so.15': 'libhwloc15',
+    'libuv.so.1': 'libuv1',
+    'libcurl.so.4': 'libcurl4',
+    'libjansson.so.4': 'libjansson4',
+    'libssl.so.3': 'libssl3',
+    'libcrypto.so.3': 'libssl3',
+    'libgomp.so.1': 'libgomp1',
+  };
+  if (known[lib]) return known[lib];
+  // libboost_thread.so.1.83.0 -> libboost-thread1.83.0
+  const boost = lib.match(/^libboost_([a-z_]+)\.so\.([\d.]+)$/);
+  if (boost) return 'libboost-' + boost[1].replace(/_/g, '-') + boost[2];
+  return null;
+}
+
+// If the log shows a dynamic-linker failure, return a friendly, actionable
+// message naming the apt package, else null.
+function missingLibHint(logLines) {
+  for (const line of logLines) {
+    const m = line.match(/error while loading shared libraries:\s*([^:]+):\s*cannot open shared object/);
+    if (!m) continue;
+    const lib = m[1].trim();
+    const pkg = aptPackageFor(lib);
+    if (pkg) {
+      return 'the miner needs a system library it could not find (' + lib + ').\n' +
+        'install it and press start again:\n  sudo apt install ' + pkg;
+    }
+    return 'the miner needs a system library it could not find (' + lib + ').\n' +
+      'install the package that provides it (try: apt-file search ' + lib + ').';
+  }
+  return null;
+}
+
 // ---- command lines, straight from the field tested hub recipes ------------
 
 function buildArgs(algo, cfg) {
@@ -413,8 +451,10 @@ function spawnMiner(cfg, bin) {
   child.on('exit', (code, signal) => {
     state.miner = null;
     if (!state.stopping) {
+      const hint = missingLibHint(state.log);
       const tail = state.log.slice(-3).join('\n');
-      emit({ type: 'error', text: 'miner exited (' + (signal || code) + ')' + (tail ? '\n' + tail : '') });
+      const text = hint || 'miner exited (' + (signal || code) + ')' + (tail ? '\n' + tail : '');
+      emit({ type: 'error', text });
       killChild(state.proxy).then(() => {
         state.proxy = null;
       });
@@ -543,5 +583,7 @@ module.exports = {
   pickShareDiff,
   parsers: PARSERS,
   shareParsers: SHARE_PARSERS,
+  missingLibHint,
+  aptPackageFor,
   manifest,
 };

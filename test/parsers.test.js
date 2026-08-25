@@ -1,7 +1,7 @@
 // Miner output parsing and command line building. Run with: node test/parsers.test.js
 
 const assert = require('assert');
-const { parsers, shareParsers, buildArgs } = require('../src/minerman');
+const { parsers, shareParsers, buildArgs, missingLibHint, aptPackageFor } = require('../src/minerman');
 
 let passed = 0;
 function ok(name, fn) {
@@ -78,6 +78,27 @@ ok('veilminer accepted count from A/R', () => {
 ok('ccminer accepted out of total', () => {
   assert.deepStrictEqual(shareParsers.sha256d('[2026-08-24 06:00:00] accepted: 12/13 (diff 512.00), 3.33 GH/s yes!'), { accepted: 12, rejected: 1 });
   assert.strictEqual(shareParsers.sha256d('[2026-08-24 06:00:00] GPU #0: NVIDIA, 3331.21 MH/s'), null);
+});
+
+ok('missing library crash becomes an apt hint (real rig errors)', () => {
+  // xmrig / RandomX on a fresh ubuntu
+  const rx = missingLibHint(['xmrig: error while loading shared libraries: libhwloc.so.15: cannot open shared object file: No such file or directory']);
+  assert(rx && /sudo apt install libhwloc15/.test(rx), rx);
+  // veilminer / ProgPoW
+  const pp = missingLibHint(['veilminer: error while loading shared libraries: libboost_thread.so.1.83.0: cannot open shared object file: No such file or directory']);
+  assert(pp && /sudo apt install libboost-thread1\.83\.0/.test(pp), pp);
+});
+
+ok('apt package mapping', () => {
+  assert.strictEqual(aptPackageFor('libhwloc.so.15'), 'libhwloc15');
+  assert.strictEqual(aptPackageFor('libcurl.so.4'), 'libcurl4');
+  assert.strictEqual(aptPackageFor('libjansson.so.4'), 'libjansson4');
+  assert.strictEqual(aptPackageFor('libboost_system.so.1.83.0'), 'libboost-system1.83.0');
+  assert.strictEqual(aptPackageFor('libweird.so.9'), null);
+});
+
+ok('normal exit has no lib hint', () => {
+  assert.strictEqual(missingLibHint(['miner    speed 10s/60s/15m 3834.9 H/s', 'net new job']), null);
 });
 
 console.log(passed + ' checks passed');
