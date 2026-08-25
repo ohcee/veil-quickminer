@@ -1,6 +1,6 @@
 {
   "name": "veil-quickminer",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "One click mining for Veil. Paste an address, pick solo or pool, hit start.",
   "main": "main.js",
   "author": {

@@ -108,6 +108,23 @@ function renderTuning() {
     el.append(cb, name);
     list.appendChild(el);
   });
+  renderPowerCmd();
+}
+
+// Power limits need root, so the app does not apply them: it shows the exact
+// nvidia-smi command for the selected cards for the user to run.
+function renderPowerCmd() {
+  const wrap = $('power-cmd-wrap');
+  const gpus = (state.hw && state.hw.gpus) || [];
+  const w = parseInt($('power-watts').value, 10);
+  if (!(w >= 50 && w <= 600) || !state.devices || !gpus.length) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  const ids = [...state.devices].sort((a, b) => a - b).join(',');
+  $('power-cmd').textContent =
+    'sudo nvidia-smi -pm 1\nsudo nvidia-smi -i ' + ids + ' -pl ' + w;
+  wrap.classList.remove('hidden');
 }
 
 function matchingPools() {
@@ -397,6 +414,7 @@ async function init() {
     state.intensity = btn.dataset.i;
     [...$('intensity-seg').children].forEach((b) => b.classList.toggle('active', b === btn));
   });
+  $('power-watts').addEventListener('input', renderPowerCmd);
   $('find-node').addEventListener('click', findNode);
   $('start').addEventListener('click', onStart);
   window.qm.onMiningEvent(onMiningEvent);

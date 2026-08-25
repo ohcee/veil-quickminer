@@ -67,6 +67,14 @@
         </div>
       </div>
       <div class="hint">higher intensity means more hashrate and more heat; Auto lets the miner decide</div>
+      <div class="tune-row">
+        <span class="tune-label">Power</span>
+        <input id="power-watts" type="number" min="50" max="600" placeholder="watts per card, optional" spellcheck="false">
+      </div>
+      <div id="power-cmd-wrap" class="hidden">
+        <div class="hint">power limits need root, so run this yourself (persists until reboot):</div>
+        <pre id="power-cmd" class="cmd"></pre>
+      </div>
     </section>
 
     <section class="card run">
@@ -93,7 +101,7 @@
     </section>
   </main>
 
-  <footer>v0.3.2 · portable linux miners</footer>
+  <footer>v0.3.3 · gpu tuning</footer>
 
   <script src="app.js"></script>
 </body>
