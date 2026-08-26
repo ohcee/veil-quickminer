@@ -32,10 +32,6 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Regenerate the icon
-        if: runner.os != 'Windows'
-        run: python3 build/make-icon.py || true
-
       - name: Test
         run: npm test
 
